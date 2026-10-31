@@ -143,11 +143,11 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .donut .seg-c{cursor:pointer;transition:opacity .15s}
 .donut .seg-c:hover{opacity:.8}
 .legend{display:flex;flex-direction:column}
-.lg{display:flex;align-items:center;gap:10px;padding:9px 4px;border-top:1px solid var(--line);width:100%;text-align:left}
-.lg:first-child{border-top:0}
-.lg .sw{width:12px;height:12px;border-radius:4px;flex:none}
-.lg .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
-.lg .p{color:var(--muted);font-size:12px}
+.legrow{display:flex;align-items:center;gap:10px;padding:9px 4px;border-top:1px solid var(--line);width:100%;text-align:left}
+.legrow:first-child{border-top:0}
+.legrow .sw{width:12px;height:12px;border-radius:4px;flex:none}
+.legrow .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.legrow .p{color:var(--muted);font-size:12px}
 .chart{width:100%;display:block;overflow:visible}
 .chart text{font-family:var(--font);fill:var(--muted);font-size:11px}
 .chart .grid-l{stroke:var(--line);stroke-width:1}
@@ -694,7 +694,7 @@ function viewStats(){
     '<span class="mid"><div class="t1">'+esc(x.note||c.name)+'</div><div class="t2">'+esc(dLabel(x.date))+' · '+esc(c.name)+'</div></span><span class="amt num">'+money(x.amt)+'</span></button>'}).join('');
   return demoBanner()+'<div class="grid two">'+
    '<section class="card span2"><div class="chead"><div><h2>สัดส่วนรายจ่ายตามหมวด</h2><p class="sub">แตะวงกลมหรือชื่อหมวดเพื่อดูรายการ</p></div></div>'+
-    (d.tot?'<div class="donutbox">'+d.svg+'<div class="legend">'+d.items.map(it=>'<button type="button" class="lg" data-a="catfilter" data-id="'+esc(it.c.id)+'"><span class="sw" style="background:'+it.c.color+'"></span><span class="n">'+esc(it.c.name)+'</span><span class="p num">'+Math.round(it.v/d.tot*100)+'%</span><b class="num">'+money0(it.v)+'</b></button>').join('')+'</div></div>':'<div class="empty"><b>ยังไม่มีรายจ่ายในเดือนนี้</b>บันทึกรายจ่ายเพื่อดูสัดส่วน</div>')+'</section>'+
+    (d.tot?'<div class="donutbox">'+d.svg+'<div class="legend">'+d.items.map(it=>'<button type="button" class="legrow" data-a="catfilter" data-id="'+esc(it.c.id)+'"><span class="sw" style="background:'+it.c.color+'"></span><span class="n">'+esc(it.c.name)+'</span><span class="p num">'+Math.round(it.v/d.tot*100)+'%</span><b class="num">'+money0(it.v)+'</b></button>').join('')+'</div></div>':'<div class="empty"><b>ยังไม่มีรายจ่ายในเดือนนี้</b>บันทึกรายจ่ายเพื่อดูสัดส่วน</div>')+'</section>'+
    '<section class="card span2" id="lineCard"><div class="chead"><div><h2>ยอดสะสมรายวัน เทียบเส้นงบ</h2><p class="sub">ดูว่าตอนนี้ใช้เร็วกว่าแผนหรือไม่</p></div></div>'+ln.svg+
     '<div class="legline"><span><i style="border-color:var(--teal)"></i>เดือนนี้</span>'+(ln.tb?'<span><i style="border-color:var(--orange);border-top-style:dashed"></i>เส้นงบ</span>':'')+'<span><i style="border-color:var(--muted);opacity:.6"></i>เดือนก่อน</span></div>'+paceHtml(k,ln)+'</section>'+
    '<section class="card"><div class="chead"><div><h2>เปรียบเทียบกับเดือนก่อน</h2><p class="sub">'+esc(mShort(k))+' เทียบ '+esc(mShort(addM(k,-1)))+' และค่าเฉลี่ย 3 เดือน</p></div></div>'+
