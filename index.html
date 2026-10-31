@@ -364,7 +364,7 @@ function makeDemo(){
   });
   return out;
 }
-const isDemo=()=>S.real.length===0;
+const isDemo=()=>false;
 let _demo=null;
 const txs=()=>{if(!isDemo())return S.real;if(!_demo)_demo=makeDemo();return _demo};
 
