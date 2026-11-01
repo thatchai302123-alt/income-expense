@@ -502,8 +502,21 @@ const MONTHS=['มกราคม','กุมภาพันธ์','มีน�
 const MS=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 const DAYS=['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
 const DS=['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
-const mLabel=k=>{const[y,m]=k.split('-').map(Number);return MONTHS[m-1]+' '+(y+543)};
-const mShort=k=>{const[y,m]=k.split('-').map(Number);return MS[m-1]+' '+String(y+543).slice(2)};
+const sd=()=>{const v=S&&S.cfg&&S.cfg.startDay;return v>=1&&v<=28?v:1};
+const dimRaw=k=>{const[y,m]=k.split('-').map(Number);return new Date(y,m,0).getDate()};
+const pDateRaw=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
+const ymdRaw=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const addMRaw=(k,n)=>{const[y,m]=k.split('-').map(Number);const d=new Date(y,m-1+n,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')};
+/* pay cycle: key k=YYYY-MM is the cycle that STARTS in that month on day sd() */
+const cycStart=k=>k+'-'+String(sd()).padStart(2,'0');
+const cycEnd=k=>{if(sd()===1)return k+'-'+String(dimRaw(k)).padStart(2,'0');const d=pDateRaw(addMRaw(k,1)+'-'+String(sd()).padStart(2,'0'));d.setDate(d.getDate()-1);return ymdRaw(d)};
+const cycOf=s=>{const ym=s.slice(0,7);return sd()===1||+s.slice(8,10)>=sd()?ym:addMRaw(ym,-1)};
+const cycDays=k=>Math.round((pDateRaw(cycEnd(k))-pDateRaw(cycStart(k)))/864e5)+1;
+const cycIdx=(k,s)=>Math.round((pDateRaw(s)-pDateRaw(cycStart(k)))/864e5);
+const addDay=(s,n)=>{const d=pDateRaw(s);d.setDate(d.getDate()+n);return ymdRaw(d)};
+const mLabel=k=>{const[y,m]=k.split('-').map(Number);if(sd()===1)return MONTHS[m-1]+' '+(y+543);const a=pDateRaw(cycStart(k)),b=pDateRaw(cycEnd(k));return a.getDate()+' '+MS[a.getMonth()]+' – '+b.getDate()+' '+MS[b.getMonth()]+' '+String(b.getFullYear()+543).slice(2)};
+const mShort=k=>{const[y,m]=k.split('-').map(Number);if(sd()===1)return MS[m-1]+' '+String(y+543).slice(2);const a=pDateRaw(cycStart(k)),b=pDateRaw(cycEnd(k));return a.getDate()+' '+MS[a.getMonth()]+'–'+b.getDate()+' '+MS[b.getMonth()]};
+const mBar=k=>{const b=pDateRaw(cycEnd(k));return sd()===1?MS[+k.slice(5,7)-1]:MS[b.getMonth()]};
 const addM=(k,n)=>{const[y,m]=k.split('-').map(Number);const d=new Date(y,m-1+n,1);return d.getFullYear()+'-'+pad(d.getMonth()+1)};
 const dim=k=>{const[y,m]=k.split('-').map(Number);return new Date(y,m,0).getDate()};
 const pDate=s=>{const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)};
@@ -535,9 +548,10 @@ const DEFAULT_CFG={
   {id:'q2',name:'ค่าข้าว',amt:80,cat:'food',t:'e'},
   {id:'q3',name:'รถไฟฟ้า',amt:45,cat:'travel',t:'e'}
  ],
- opening:null
+ opening:null,
+ startDay:25
 };
-const S={cfg:clone(DEFAULT_CFG),real:[],month:todayStr().slice(0,7),view:'home',loaded:false,auth:'loading',mode:'local',cf:'year',
+const S={cfg:clone(DEFAULT_CFG),real:[],month:'',view:'home',loaded:false,auth:'loading',mode:'local',cf:'year',
   f:{q:'',range:'month',from:'',to:'',min:'',max:'',cat:'',t:'',open:false},edit:null,cedit:null,delArm:false};
 const catOf=id=>S.cfg.cats.find(c=>c.id===id)||{id,name:'ไม่ระบุหมวด',color:'#5C6B73',icon:'tag',kind:'e'};
 const expCats=()=>S.cfg.cats.filter(c=>c.kind==='e');
@@ -579,7 +593,7 @@ const store={
 };
 function mergeCfg(c){
   if(!c||!Array.isArray(c.cats))return;
-  S.cfg={cats:c.cats,quick:Array.isArray(c.quick)?c.quick:[],opening:typeof c.opening==='number'&&isFinite(c.opening)?c.opening:null};
+  S.cfg={cats:c.cats,quick:Array.isArray(c.quick)?c.quick:[],opening:typeof c.opening==='number'&&isFinite(c.opening)?c.opening:null,startDay:Number.isInteger(c.startDay)&&c.startDay>=1&&c.startDay<=28?c.startDay:25};
 }
 async function loadAll(){
   let all=[],from=0;const step=1000;
@@ -596,10 +610,10 @@ async function loadAll(){
   if(c&&c.cfg&&!cfgBusy&&!cfgDirty)mergeCfg(c.cfg);
 }
 async function enter(user){
-  USER=user;S.auth='in';S.loaded=false;render();
+  USER=user;S.auth='in';S.loaded=false;S.month=cycOf(todayStr());render();
   try{await loadAll();S.mode='sync'}
   catch(e){S.mode='error';toast('โหลดข้อมูลไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วรีเฟรชหน้า','bad')}
-  S.loaded=true;render();
+  S.month=cycOf(todayStr());S.loaded=true;render();
 }
 async function boot(){
   if(!window.supabase){S.auth='error';render();return}
@@ -641,7 +655,7 @@ document.addEventListener('visibilitychange',async()=>{
 });
 
 /* ---------- calculations ---------- */
-function monthTx(k){return txs().filter(x=>x.date.slice(0,7)===k)}
+function monthTx(k){return txs().filter(x=>cycOf(x.date)===k)}
 function totals(k){
   const m=monthTx(k);
   const inc=sum(m.filter(x=>x.t==='i'),x=>x.amt),exp=sum(m.filter(x=>x.t==='e'),x=>x.amt);
@@ -660,7 +674,7 @@ function budgetState(spent,budget){
 const fillCls=st=>st.cls==='over'?'fo':st.cls==='warn'?'fa':'fb';
 function totalBudget(){return sum(expCats(),c=>c.budget||0)}
 function balanceUpTo(k){
-  const end=k+'-'+pad(dim(k));let b=S.cfg.opening||0;
+  const end=cycEnd(k);let b=S.cfg.opening||0;
   txs().forEach(x=>{if(x.date<=end)b+=x.t==='i'?x.amt:-x.amt});
   return b;
 }
@@ -671,8 +685,8 @@ function alertsFor(k){
     .sort((a,b)=>b.st.r-a.st.r);
 }
 function cumulative(k){
-  const n=dim(k),arr=new Array(n).fill(0);
-  monthTx(k).filter(x=>x.t==='e').forEach(x=>{arr[+x.date.slice(8,10)-1]+=x.amt});
+  const n=cycDays(k),arr=new Array(n).fill(0);
+  monthTx(k).filter(x=>x.t==='e').forEach(x=>{const i=cycIdx(k,x.date);if(i>=0&&i<n)arr[i]+=x.amt});
   let s=0;return arr.map(v=>(s+=v));
 }
 function niceMax(v){
@@ -684,12 +698,13 @@ function cashflow(period){
   const k=S.month,out=[];
   const bucket=(label,full,test)=>{let i=0,e=0;txs().forEach(x=>{if(test(x.date)){if(x.t==='i')i+=x.amt;else e+=x.amt}});out.push({label,full,i,e})};
   if(period==='year'){
-    for(let n=11;n>=0;n--){const m=addM(k,-n);const mm=+m.slice(5,7);bucket(MS[mm-1],mLabel(m),d=>d.slice(0,7)===m)}
+    for(let n=11;n>=0;n--){const m=addM(k,-n);bucket(mBar(m),mLabel(m),d=>cycOf(d)===m)}
   }else if(period==='month'){
-    const n=dim(k);[[1,7],[8,14],[15,21],[22,28],[29,n]].forEach(([a,b])=>{if(a>n)return;
-      const lo=k+'-'+pad(a),hi=k+'-'+pad(Math.min(b,n));bucket(a+'–'+Math.min(b,n),a+'–'+Math.min(b,n)+' '+MS[+k.slice(5,7)-1],d=>d>=lo&&d<=hi)});
+    const st=cycStart(k),en=cycEnd(k);
+    for(let lo=st;lo<=en;lo=addDay(lo,7)){let hi=addDay(lo,6);if(hi>en||addDay(hi,3)>en)hi=en;
+      const a=pDate(lo),b=pDate(hi),lo2=lo,hi2=hi;bucket(a.getDate()+'–'+b.getDate(),dShort(lo)+' – '+dShort(hi),d=>d>=lo2&&d<=hi2);if(hi===en)break}
   }else{
-    const t=todayStr(),endM=k+'-'+pad(dim(k));const end=pDate(t.slice(0,7)===k?t:(endM<t?endM:t));
+    const t=todayStr(),endM=cycEnd(k);const end=pDate(endM<t?endM:t);
     for(let n=6;n>=0;n--){const d=new Date(end);d.setDate(d.getDate()-n);const s=ymd(d);bucket(DS[d.getDay()],dLabel(s),x=>x===s)}
   }
   return out;
@@ -741,21 +756,21 @@ function cashflowCard(){
 }
 function viewHome(){
   const k=S.month,t=totals(k),pt=totals(addM(k,-1)),tb=totalBudget();
-  const hasOpen=S.cfg.opening!==null;
-  const bal=balanceUpTo(k),prevBal=balanceUpTo(addM(k,-1)),delta=bal-prevBal;
-  const dp=prevBal>0?(delta/prevBal*100):null;
-  const used=t.exp,left=Math.max(0,t.inc-t.exp);
+  const bal=balanceUpTo(k),left=t.inc-t.exp,pLeft=pt.inc-pt.exp,isCur=k===cycOf(todayStr());
+  const used=t.exp;
   const wE=t.inc>0?Math.min(100,used/t.inc*100):(used>0?100:0);
   const split=t.inc>0||used>0?'<i class="seg-o" style="width:'+wE.toFixed(1)+'%"></i><i class="seg-g" style="flex:1'+(left<=0?';display:none':'')+'"></i>':'<i class="seg-t" style="flex:1"></i>';
   const incP=pct(t.inc,pt.inc),expBud=tb?Math.round(t.exp/tb*100):null,save=t.inc>0?Math.round(t.bal/t.inc*100):null;
+  const dl=left-pLeft;
   const hero='<section class="glass hero wide lift" aria-labelledby="hNet"><div>'+
-    '<h2 id="hNet">'+(hasOpen?'เงินคงเหลือทั้งหมด':'คงเหลือสะสมจากรายการที่บันทึก')+'</h2>'+
-    '<p class="big num">'+sMoney0(bal)+'</p>'+
-    '<div class="deltas">'+(t.n||pt.n?(delta>=0?'<span class="chipg">'+ic('arrUp')+(dp!==null?dp.toFixed(1)+'%':'เพิ่มขึ้น')+'</span><span>เพิ่มขึ้น '+money0(delta)+' ใน'+esc(mLabel(k))+'</span>':'<span class="chipb">'+ic('arrDn')+(dp!==null?Math.abs(dp).toFixed(1)+'%':'ลดลง')+'</span><span>ลดลง '+money0(-delta)+' ใน'+esc(mLabel(k))+'</span>'):'<span>ยังไม่มีรายการใน'+esc(mLabel(k))+'</span>')+'</div>'+
-    (hasOpen?'':'<p class="hint" style="margin-top:10px">'+ic('pen')+'ใส่ยอดเงินตั้งต้น เพื่อให้ตัวเลขนี้ตรงกับเงินจริง <button type="button" data-a="goview" data-v="budget">ตั้งค่า</button></p>')+
-    '</div><div><div class="split" role="img" aria-label="ใช้ไป '+Math.round(wE)+'% ของรายรับเดือนนี้">'+split+'</div>'+
-    '<div class="leg2"><div><p><i class="sw" style="background:#EA6C1E"></i>ใช้ไปเดือนนี้</p><p class="v num">'+money0(used)+'</p></div>'+
-    '<div><p><i class="sw" style="background:#0F9F7F"></i>'+(t.inc-t.exp<0?'ใช้เกินรายรับ':'เหลือเดือนนี้')+'</p><p class="v num'+(t.inc-t.exp<0?' c-r':'')+'">'+money0(Math.abs(t.inc-t.exp))+'</p></div></div></div></section>';
+    '<h2 id="hNet">'+(left<0?'ใช้เกินรายรับ':'เงินเหลือ')+(isCur?'เดือนนี้':'')+' · '+esc(mLabel(k))+'</h2>'+
+    '<p class="big num'+(left<0?' c-r':'')+'">'+sMoney0(left)+'</p>'+
+    '<div class="deltas">'+(t.n?'<span>รายรับ '+money0(t.inc)+' − รายจ่าย '+money0(t.exp)+'</span>':'<span>ยังไม่มีรายการในรอบ '+esc(mLabel(k))+'</span>')+
+      (pt.n&&t.n?(dl>=0?'<span class="chipg">'+ic('arrUp')+money0(dl)+'</span><span>มากกว่ารอบก่อน</span>':'<span class="chipb">'+ic('arrDn')+money0(-dl)+'</span><span>น้อยกว่ารอบก่อน</span>'):'')+'</div>'+
+    '<p class="hint" style="margin-top:10px">'+(S.cfg.opening!==null?'เงินคงเหลือทั้งหมด':'คงเหลือสะสมจากทุกรายการ')+' <b class="num">'+sMoney0(bal)+'</b>'+(S.cfg.opening!==null?'':' <button type="button" data-a="goview" data-v="budget">ใส่ยอดตั้งต้น</button>')+'</p>'+
+    '</div><div><div class="split" role="img" aria-label="ใช้ไป '+Math.round(wE)+'% ของรายรับ">'+split+'</div>'+
+    '<div class="leg2"><div><p><i class="sw" style="background:#EA6C1E"></i>ใช้ไป'+(t.inc>0?' '+Math.round(used/t.inc*100)+'%':'')+'</p><p class="v num">'+money0(used)+'</p></div>'+
+    '<div><p><i class="sw" style="background:#0F9F7F"></i>รายรับ</p><p class="v num">'+money0(t.inc)+'</p></div></div></div></section>';
   const stats='<div class="narrow col">'+
     '<div class="glass stat lift"><span class="tile t-g">'+ic('arrDn')+'</span><div class="mid"><p class="lbl">รายรับเดือนนี้</p><p class="v num">'+money0(t.inc)+'</p></div><span class="note2 num '+(incP===null?'c-m':incP>=0?'c-g':'c-o')+'">'+(incP===null?'–':(incP>=0?'+':'')+incP+'%')+'</span></div>'+
     '<div class="glass stat lift"><span class="tile t-o">'+ic('arrUp')+'</span><div class="mid"><p class="lbl">รายจ่ายเดือนนี้</p><p class="v num">'+money0(t.exp)+'</p></div><span class="note2 '+(expBud===null?'c-m':expBud>100?'c-o':expBud>=80?'c-o':'c-m')+'">'+(expBud===null?'ไม่ได้ตั้งงบ':expBud+'% ของงบ')+'</span></div>'+
@@ -767,7 +782,7 @@ function viewHome(){
     (list.length?'<div class="blist">'+budgetRowsHtml(list,k,'catfilter')+'</div>'+budgetNote(k):'<div class="empty"><b>ยังไม่ได้ตั้งงบ</b>ตั้งงบรายเดือนให้แต่ละหมวด แล้วจะเห็นว่าใช้เกินตรงไหน<br><button type="button" class="btn-dark" data-a="goview" data-v="budget">ตั้งงบ</button></div>')+'</section>';
   const recent=monthTx(k).slice().sort((a,b)=>b.date.localeCompare(a.date)||(b.ts||0)-(a.ts||0)).slice(0,6);
   const rec='<section class="glass card wide" aria-labelledby="hTx"><div class="ch"><h2 id="hTx">รายการล่าสุด</h2><button type="button" class="link" data-a="goview" data-v="tx">ดูทั้งหมด'+ic('chev')+'</button></div>'+
-    (recent.length?'<div class="txl">'+recent.map(x=>txRow(x,true)).join('')+'</div>':'<div class="empty"><b>ยังไม่มีรายการใน'+esc(mLabel(k))+'</b>กดบันทึกรายการเพื่อเริ่ม<br><button type="button" class="btn-dark" data-a="add">'+ic('plus')+'บันทึกรายการ</button></div>')+'</section>';
+    (recent.length?'<div class="txl">'+recent.map(x=>txRow(x,true)).join('')+'</div>':'<div class="empty"><b>ยังไม่มีรายการในรอบ '+esc(mLabel(k))+'</b>กดบันทึกรายการเพื่อเริ่ม<br><button type="button" class="btn-dark" data-a="add">'+ic('plus')+'บันทึกรายการ</button></div>')+'</section>';
   const q=S.cfg.quick;
   const quick='<section class="glass card narrow" aria-labelledby="hQ"><div class="ch"><div><h2 id="hQ">บันทึกด่วน</h2><p class="sub">แตะครั้งเดียว บันทึกเป็นวันนี้</p></div></div>'+
     (q.length?'<div class="qgrid">'+q.map(x=>{const c=catOf(x.cat);return '<button type="button" class="qbtn" data-a="quick" data-id="'+esc(x.id)+'">'+ctile(c,'s')+'<span class="mid"><span class="q1" style="display:block">'+esc(x.name)+'</span><span class="q2 num" style="display:block">'+money0(x.amt)+'</span></span></button>'}).join('')+'</div>'
@@ -778,7 +793,7 @@ function viewHome(){
 /* ---------- views: transactions ---------- */
 function filtered(){
   const f=S.f,q=f.q.trim().toLowerCase();let from='',to='';
-  if(f.range==='month'){from=S.month+'-01';to=S.month+'-'+pad(dim(S.month))}
+  if(f.range==='month'){from=cycStart(S.month);to=cycEnd(S.month)}
   else if(f.range==='custom'){from=f.from;to=f.to}
   const mn=f.min===''?null:+f.min,mx=f.max===''?null:+f.max;
   return txs().filter(x=>(!from||x.date>=from)&&(!to||x.date<=to)&&(!f.cat||x.cat===f.cat)&&(!f.t||x.t===f.t)&&
@@ -829,7 +844,9 @@ function viewBudget(){
     '<div class="ch" style="margin-top:22px"><h2>หมวดรายจ่าย</h2><button type="button" class="link" data-a="addcat" data-kind="e">'+ic('plus')+'เพิ่มหมวด</button></div>'+
     '<p class="sub">แตะหมวดเพื่อแก้ชื่อ สี ไอคอน และงบ</p><div class="blist">'+budgetRowsHtml(expCats(),k,'editcat')+'</div></section>'+
    '<div class="narrow col">'+
-    '<section class="glass card"><div class="ch"><h2>ยอดเงินตั้งต้น</h2></div><p class="sub">เงินที่มีอยู่ก่อนเริ่มบันทึก ใช้คำนวณ “เงินคงเหลือทั้งหมด” ในหน้าภาพรวม</p>'+
+    '<section class="glass card"><div class="ch"><h2>วันเริ่มรอบเดือน</h2></div><p class="sub">วันที่เงินเดือนออก ทุกหน้าจะนับรายรับรายจ่ายตั้งแต่วันนี้ถึงก่อนวันนี้ของเดือนถัดไป</p>'+
+     '<div class="rowbtns" style="flex-wrap:nowrap"><select id="sDay" class="fld num" aria-label="วันเริ่มรอบเดือน">'+Array.from({length:28},(_,i)=>i+1).map(d=>'<option value="'+d+'"'+(d===sd()?' selected':'')+'>'+(d===1?'วันที่ 1 (ตามเดือนปฏิทิน)':'วันที่ '+d+' ของทุกเดือน')+'</option>').join('')+'</select><button type="button" class="btn-soft" data-a="savestart">บันทึก</button></div></section>'+
+    '<section class="glass card"><div class="ch"><h2>ยอดเงินตั้งต้น</h2></div><p class="sub">เงินที่มีอยู่ก่อนเริ่มบันทึก ใช้คำนวณ “เงินคงเหลือทั้งหมด” ที่แสดงใต้ตัวเลขใหญ่ในหน้าภาพรวม</p>'+
      '<div class="rowbtns" style="flex-wrap:nowrap"><input id="oBal" class="fld num" type="text" inputmode="decimal" placeholder="เช่น 50000" value="'+(op===null?'':esc(op))+'" aria-label="ยอดเงินตั้งต้น"><button type="button" class="btn-soft" data-a="saveopening">บันทึก</button></div></section>'+
     '<section class="glass card"><div class="ch"><h2>หมวดรายรับ</h2><button type="button" class="link" data-a="addcat" data-kind="i">'+ic('plus')+'เพิ่ม</button></div><div class="txl">'+
      inc.map(c=>'<button type="button" class="tx" data-a="editcat" data-id="'+esc(c.id)+'">'+ctile(c,'s')+'<span class="mid"><span class="t1" style="display:block">'+esc(c.name)+'</span></span>'+ic('chev')+'</button>').join('')+'</div></section>'+
@@ -859,15 +876,15 @@ function donutSvg(k){
     '<text x="110" y="127" text-anchor="middle" style="font-family:var(--font-num);font-size:22px;font-weight:700;fill:var(--ink)">'+money0(tot)+'</text></svg>'};
 }
 function lineSvg(k,W){
-  const n=dim(k),cur=cumulative(k),prev=cumulative(addM(k,-1)),tb=totalBudget();
-  const tm=todayStr().slice(0,7),upto=k===tm?new Date().getDate():(k>tm?0:n);
+  const n=cycDays(k),cur=cumulative(k),prev=cumulative(addM(k,-1)),tb=totalBudget();
+  const tm=cycOf(todayStr()),upto=k===tm?cycIdx(k,todayStr())+1:(k>tm?0:n);
   const H=232,L=42,R=14,T=14,B=26,iw=W-L-R,ih=H-T-B;
   const pn=Math.min(prev.length,n);
   const mx=niceMax(Math.max(cur[n-1]||0,tb,prev[pn-1]||0));
   const X=d=>L+(n===1?0:(d-1)/(n-1)*iw),Y=v=>T+(1-v/mx)*ih;
   let g='';
   for(let i=0;i<=4;i++){const v=mx*i/4,y=Y(v);g+='<line class="gl" x1="'+L+'" x2="'+(W-R)+'" y1="'+y.toFixed(1)+'" y2="'+y.toFixed(1)+'"/><text x="'+(L-6)+'" y="'+(y+4).toFixed(1)+'" text-anchor="end">'+kfmt(v)+'</text>'}
-  [1,5,10,15,20,25,n].filter((d,i,a)=>d<=n&&a.indexOf(d)===i&&(d===n||n-d>=3)).forEach(d=>{g+='<text x="'+X(d).toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle">'+d+'</text>'});
+  [1,6,11,16,21,26,n].filter((d,i,a)=>d<=n&&a.indexOf(d)===i&&(d===n||n-d>=3)).forEach(d=>{g+='<text x="'+X(d).toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle">'+pDate(addDay(cycStart(k),d-1)).getDate()+'</text>'});
   const pl=prev[pn-1]>0?'<polyline fill="none" stroke="var(--muted)" stroke-opacity=".5" stroke-width="2" points="'+prev.slice(0,pn).map((v,i)=>X(i+1).toFixed(1)+','+Y(v).toFixed(1)).join(' ')+'"/>':'';
   const bl=tb>0?'<line x1="'+X(1).toFixed(1)+'" y1="'+Y(tb/n).toFixed(1)+'" x2="'+X(n).toFixed(1)+'" y2="'+Y(tb).toFixed(1)+'" stroke="#EA6C1E" stroke-width="2.5" stroke-dasharray="6 5"/>':'';
   let cl='';
@@ -881,7 +898,7 @@ function lineSvg(k,W){
 function paceHtml(k,o){
   if(!o.tb)return '<p class="sub" style="margin-top:10px">ตั้งงบในหน้างบประมาณ เพื่อดูเส้นงบเทียบกับยอดใช้จริง</p>';
   if(o.upto===0)return '';
-  const spent=o.cur[o.upto-1],plan=o.tb*o.upto/o.n,diff=spent-plan,done=o.upto===o.n&&k<todayStr().slice(0,7);
+  const spent=o.cur[o.upto-1],plan=o.tb*o.upto/o.n,diff=spent-plan,done=o.upto===o.n&&k<cycOf(todayStr());
   const txt=done?(spent>o.tb?'ทั้งเดือนใช้เกินงบรวม '+money0(spent-o.tb):'ทั้งเดือนใช้ต่ำกว่างบรวม '+money0(o.tb-spent)):(diff>0?'ตอนนี้ใช้เร็วกว่าแผน '+money0(diff):'ตอนนี้ยังช้ากว่าแผน '+money0(-diff));
   const bad=done?spent>o.tb:diff>0;
   return '<div style="margin-top:10px"><span class="badge '+(bad?'b-over':'b-ok')+'">'+esc(txt)+'</span></div>';
@@ -913,7 +930,7 @@ function viewReport(){
    '<div class="row"><section class="glass card wide"><div class="ch"><div><h2>เปรียบเทียบกับเดือนก่อน</h2><p class="sub">'+esc(mShort(k))+' เทียบ '+esc(mShort(addM(k,-1)))+' และค่าเฉลี่ย 3 เดือน</p></div></div>'+
     flagged.map(r=>'<div class="alertrow">'+ic('arrUp')+'<span>'+esc(r.c.name)+' โตผิดปกติ '+(pct(r.v,r.p)!==null?'+'+pct(r.v,r.p)+'% ':'')+'(เพิ่ม '+money0(r.v-r.p)+')</span></div>').join('')+
     (rows.length?'<div style="margin-top:8px">'+cmp+'</div>':'<div class="empty"><b>ยังไม่มีข้อมูลเปรียบเทียบ</b></div>')+'</section>'+
-   '<section class="glass card narrow"><div class="ch"><div><h2>10 รายการที่แพงที่สุด</h2><p class="sub">ของ'+esc(mLabel(k))+'</p></div></div><div style="margin-top:8px">'+(topH||'<div class="empty"><b>ยังไม่มีรายจ่าย</b></div>')+'</div></section></div>';
+   '<section class="glass card narrow"><div class="ch"><div><h2>10 รายการที่แพงที่สุด</h2><p class="sub">ของรอบ '+esc(mLabel(k))+'</p></div></div><div style="margin-top:8px">'+(topH||'<div class="empty"><b>ยังไม่มีรายจ่าย</b></div>')+'</div></section></div>';
 }
 
 /* ---------- shell ---------- */
@@ -1014,7 +1031,7 @@ function pressKey(k){
   const err=$('#sErr');if(err)err.textContent='';
 }
 const parseAmt=v=>{const n=parseFloat(String(v).replace(/[,\s฿]/g,''));return isFinite(n)?Math.round(n*100)/100:NaN};
-function spentReal(cat,mk){return sum(S.real.filter(x=>x.t==='e'&&x.cat===cat&&x.date.slice(0,7)===mk),x=>x.amt)}
+function spentReal(cat,mk){return sum(S.real.filter(x=>x.t==='e'&&x.cat===cat&&cycOf(x.date)===mk),x=>x.amt)}
 function budgetAlert(cat,before,after){
   const c=catOf(cat);if(!c.budget)return false;
   if(before<=c.budget&&after>c.budget){toast(c.name+' เกินงบแล้ว '+money0(after-c.budget),'bad');return true}
@@ -1028,8 +1045,8 @@ async function saveTx(){
   if(!e.cat){err.textContent='เลือกหมวดหมู่ก่อน';return}
   if(!/^\d{4}-\d\d-\d\d$/.test(e.date)){err.textContent='เลือกวันที่ให้ถูกต้อง';return}
   const rec={t:e.t,amt,cat:e.cat,date:e.date,note:e.note.trim()};
-  const mk=e.date.slice(0,7),old=e.id?S.real.find(x=>x.id===e.id):null;
-  let before=spentReal(e.cat,mk);if(old&&old.t==='e'&&old.cat===e.cat&&old.date.slice(0,7)===mk)before-=old.amt;
+  const mk=cycOf(e.date),old=e.id?S.real.find(x=>x.id===e.id):null;
+  let before=spentReal(e.cat,mk);if(old&&old.t==='e'&&old.cat===e.cat&&cycOf(old.date)===mk)before-=old.amt;
   const btn=document.querySelector('[data-a="savetx"]');if(btn)btn.disabled=true;
   try{
     if(e.id)await store.set(e.id,rec);else await store.add(rec);
@@ -1042,7 +1059,7 @@ async function saveTx(){
 }
 async function quickAdd(id){
   const q=S.cfg.quick.find(x=>x.id===id);if(!q)return;
-  const mk=todayStr().slice(0,7),before=spentReal(q.cat,mk);
+  const mk=cycOf(todayStr()),before=spentReal(q.cat,mk);
   try{
     const nid=await store.add({t:q.t||'e',amt:q.amt,cat:q.cat,date:todayStr(),note:q.name});
     if(!((q.t||'e')==='e'&&budgetAlert(q.cat,before,before+q.amt)))
@@ -1139,11 +1156,12 @@ document.addEventListener('click',ev=>{
     case 'savecat':saveCat();break;
     case 'delcat':delCat();break;
     case 'delquick':S.cfg.quick=S.cfg.quick.filter(q=>q.id!==id);store.saveCfg();render();break;
+    case 'savestart':{const n=+$('#sDay').value;if(n>=1&&n<=28){const cur=cycOf(todayStr())===S.month;S.cfg.startDay=n;S.month=cur?cycOf(todayStr()):cycOf(S.month+'-15');store.saveCfg();toast('ตั้งวันเริ่มรอบเป็นวันที่ '+n+' แล้ว');render()}break}
     case 'saveopening':{const raw=$('#oBal').value.trim();
       if(raw===''){S.cfg.opening=null}else{const n=parseAmt(raw);if(!isFinite(n)){toast('ยอดเงินต้องเป็นตัวเลข','warn');break}S.cfg.opening=n}
       store.saveCfg();toast('บันทึกยอดเงินตั้งต้นแล้ว');render();break}
     case 'togglef':S.f.open=!S.f.open;render();break;
-    case 'range':S.f.range=v;if(v==='custom'){S.f.open=true;if(!S.f.from){S.f.from=S.month+'-01';S.f.to=todayStr()}}render();break;
+    case 'range':S.f.range=v;if(v==='custom'){S.f.open=true;if(!S.f.from){S.f.from=cycStart(S.month);S.f.to=todayStr()}}render();break;
     case 'ft':S.f.t=v;render();break;
     case 'clearf':S.f={q:S.f.q,range:'month',from:'',to:'',min:'',max:'',cat:'',t:'',open:true};render();break;
     case 'export':exportCsv();break;
